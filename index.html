@@ -45,7 +45,7 @@
 
     <section>
       <h2>Mapping sets</h2>
-      <p>Each set is one surface: four reference points A–D here, on the projector and in the camera. New polygons join the active set. With the Edit tool, drag A–D onto features you can find on the real surface.</p>
+      <p>Each set is one surface: four reference points A–D here, on the projector and in the camera. New polygons join the active set. With the Edit tool, drag A–D onto features you can find on the real surface, or drag a set's dashed outline to move the whole set and its polygons.</p>
       <ul id="sets" class="list" style="margin-top:8px"></ul>
       <div class="row" style="margin-top:8px">
         <input type="text" id="set-name" placeholder="Set name">
@@ -53,6 +53,16 @@
       <div class="row" style="margin-top:8px">
         <button id="add-set">Add set</button>
         <button id="reset-refs">Reset A–D</button>
+      </div>
+    </section>
+
+    <section>
+      <h2>View</h2>
+      <p>Scroll to zoom. Drag empty space (Edit tool), or hold Space or the middle button and drag, to pan.</p>
+      <div class="row" style="margin-top:8px">
+        <button id="zoom-out" title="Zoom out (−)">−</button>
+        <button id="zoom-fit" title="Fit the sheet (0)">Fit</button>
+        <button id="zoom-in" title="Zoom in (+)">+</button>
       </div>
     </section>
 

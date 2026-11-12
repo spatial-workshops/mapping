@@ -53,12 +53,21 @@ the projector and press <kbd>F</kbd> for fullscreen.
    the active set; the dropdown under a selected polygon's name moves it to
    another set. The active set is shared by all three pages, and grabbing any
    set's handle on any page makes that set active.
-3. **Projector** — for each set, drag A–D (Edit tool) until each projected
+   On this page only, you can also drag a set's dashed outline (Edit tool) to
+   move the whole set — its A–D and its polygons together. This only
+   rearranges the true geometry; the projector and camera output stay the
+   same.
+3. **Navigating the true geometry** — scroll (or pinch) to zoom about the
+   pointer; drag empty space with the Edit tool, or hold Space or the middle
+   mouse button and drag, to pan. <kbd>+</kbd> / <kbd>−</kbd> zoom,
+   <kbd>0</kbd> or *Fit* returns to the whole sheet. The sheet outline is only
+   a guide: geometry can be placed anywhere.
+4. **Projector** — for each set, drag A–D (Edit tool) until each projected
    marker sits on its real reference point. *Draw* lets you trace polygons
    directly on the projected surface, into the active set. <kbd>G</kbd> toggles the active set's alignment
    grid, <kbd>H</kbd> hides the handles and controls, <kbd>R</kbd> resets the
    active set's corners.
-4. **Camera** — start the webcam and, for each set, drag A–D onto the same
+5. **Camera** — start the webcam and, for each set, drag A–D onto the same
    four features as the camera sees them (Edit tool). The polygons are drawn
    over the video, and *Draw* lets you trace new ones over what the camera
    sees, into the active set. With the Edit tool, hover the image, or pick a detection mode (brightest spot or

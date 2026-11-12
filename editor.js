@@ -26,6 +26,8 @@ PM.createEditor = (opts) => {
     render = () => {},          // redraw request (pages with a frame loop can omit it)
     enabled = () => true,       // false disables all input (projector "clean" mode)
     onRefresh = () => {},       // extra sidebar refresh for the page
+    intercept = () => false,    // (event, x, y) -> true if the page handles this press itself
+    onEmptyPress = () => {},    // (event) Edit-tool press that hit nothing
     initialTool = 'edit',
   } = opts;
   const { state } = PM;
@@ -128,9 +130,10 @@ PM.createEditor = (opts) => {
   }
 
   canvas.addEventListener('pointerdown', (e) => {
-    if (e.button !== 0 || !enabled()) return;
-    if (document.activeElement && document.activeElement !== document.body) document.activeElement.blur();
+    if (!enabled()) return;
     const [x, y] = pointerPos(e);
+    if (intercept(e, x, y) || e.button !== 0) return;
+    if (document.activeElement && document.activeElement !== document.body) document.activeElement.blur();
 
     if (tool === 'draw') {
       const set = draft.length ? setById(draftSetId) : PM.activeSet();
@@ -164,6 +167,7 @@ PM.createEditor = (opts) => {
       select(hit.poly.id);
     } else {
       select(null);
+      onEmptyPress(e);
     }
   });
 
@@ -358,6 +362,11 @@ PM.createEditor = (opts) => {
     get tool() { return tool; },
     get selectedId() { return selectedId; },
     get busy() { return !!drag || draft.length > 0; },
+    // True if (x, y) is on a corner of the selected polygon.
+    onVertex(x, y) {
+      const sel = selected();
+      return !!sel && tool === 'edit' && PM.pick(sel.points.map((p) => toScreen(setOf(sel), p)), x, y, 9) >= 0;
+    },
     setTool, select, activate, changed, refresh, sync, drawOverlay,
     deselect() { selectedId = null; draft = []; },
   };
