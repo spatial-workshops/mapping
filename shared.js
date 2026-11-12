@@ -411,6 +411,67 @@ const PM = (() => {
     }
   }
 
+  // Draw the true-geometry grid through homography H (true geometry -> canvas
+  // pixels) as an unbounded plane: lines are generated for whatever part of
+  // the plane is visible inside `rect` {x, y, w, h}, wherever the mapping set
+  // sits in the true geometry. `refs` are the set's reference points.
+  function drawGrid(ctx, H, rect, refs, spacing = 100) {
+    const inverse = invertHomography(H);
+    if (!inverse) return;
+
+    // Never generate lines further than this from the reference points, so
+    // a view that looks towards the plane's horizon stays cheap to draw.
+    const xs = refs.map((p) => p[0]), ys = refs.map((p) => p[1]);
+    const reach = 10 * Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys), spacing);
+    let x0 = Math.min(...xs) - reach, x1 = Math.max(...xs) + reach;
+    let y0 = Math.min(...ys) - reach, y1 = Math.max(...ys) + reach;
+
+    // The part of the plane seen through `rect`. If a corner looks past the
+    // horizon the visible part is unbounded, and the limit above applies.
+    const corners = [[rect.x, rect.y], [rect.x + rect.w, rect.y], [rect.x + rect.w, rect.y + rect.h], [rect.x, rect.y + rect.h]]
+      .map((p) => applyHomography(inverse, p));
+    if (corners.every(Boolean)) {
+      x0 = Math.max(x0, Math.min(...corners.map((p) => p[0])));
+      x1 = Math.min(x1, Math.max(...corners.map((p) => p[0])));
+      y0 = Math.max(y0, Math.min(...corners.map((p) => p[1])));
+      y1 = Math.min(y1, Math.max(...corners.map((p) => p[1])));
+    }
+    if (x0 >= x1 || y0 >= y1) return;
+
+    let step = spacing;
+    while ((x1 - x0) / step > 300 || (y1 - y0) / step > 300) step *= 2;
+
+    // Clip each line to the visible side of the horizon (w > 0) before
+    // projecting it; the canvas clips the rest.
+    const w = ([x, y]) => H[6] * x + H[7] * y + H[8];
+    const near = 0.02 * Math.abs(w(refs[0]));
+    const project = ([x, y]) => {
+      const k = w([x, y]);
+      return [(H[0] * x + H[1] * y + H[2]) / k, (H[3] * x + H[4] * y + H[5]) / k];
+    };
+    const line = (a, b) => {
+      const wa = w(a), wb = w(b);
+      if (wa < near && wb < near) return;
+      const cut = (t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+      if (wa < near) a = cut((near - wa) / (wb - wa));
+      else if (wb < near) b = cut((near - wa) / (wb - wa));
+      ctx.moveTo(...project(a));
+      ctx.lineTo(...project(b));
+    };
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(rect.x, rect.y, rect.w, rect.h);
+    ctx.clip();
+    ctx.beginPath();
+    for (let x = Math.ceil(x0 / step) * step; x <= x1; x += step) line([x, y0], [x, y1]);
+    for (let y = Math.ceil(y0 / step) * step; y <= y1; y += step) line([x0, y], [x1, y]);
+    ctx.strokeStyle = 'rgba(255,255,255,0.22)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.restore();
+  }
+
   function drawLabel(ctx, text, x, y, color = '#fff', align = 'center') {
     ctx.font = '600 13px system-ui, sans-serif';
     ctx.textAlign = align;
@@ -480,7 +541,7 @@ const PM = (() => {
     init, publish, uid, defaultRefs,
     sets, activeSet, setActive, addSet,
     openView, renderSetToggles, bindViewControls, publishDetections,
-    polygonsAt, describeDetections, pickHandle, drawQuad, fillSetSelect,
+    polygonsAt, describeDetections, pickHandle, drawQuad, drawGrid, fillSetSelect,
     solveHomography, invertHomography, applyHomography,
     pointInPolygon, centroid, hitIds, pick,
     fitCanvas, drawPolygons, drawLabel, drawHandle, drawDetection,

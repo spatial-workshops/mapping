@@ -13,7 +13,7 @@
 // can run side by side in separate tabs.
 
 (() => {
-  const { WORLD, state } = PM;
+  const { state } = PM;
   const canvas = document.getElementById('canvas');
   const setsEl = document.getElementById('sets');
   const view = PM.openView('projector');
@@ -69,18 +69,7 @@
     const H = homography(set);
     const map = (p) => PM.applyHomography(H, p);
 
-    if (H && showGrid && set === PM.activeSet()) {
-      ctx.beginPath();
-      const line = (a, b) => {
-        const p = map(a), q = map(b);
-        if (p && q) { ctx.moveTo(...p); ctx.lineTo(...q); }
-      };
-      for (let x = 0; x <= WORLD.w; x += 100) line([x, 0], [x, WORLD.h]);
-      for (let y = 0; y <= WORLD.h; y += 100) line([0, y], [WORLD.w, y]);
-      ctx.strokeStyle = 'rgba(255,255,255,0.22)';
-      ctx.lineWidth = 1;
-      ctx.stroke();
-    }
+    if (H && showGrid && set === PM.activeSet()) PM.drawGrid(ctx, H, { x: 0, y: 0, w, h }, set.refs);
 
     if (H) {
       PM.drawPolygons(ctx, map, { fillAlpha: 0.55, setId: set.id, selectedId: clean ? null : editor.selectedId });

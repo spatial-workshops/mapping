@@ -71,11 +71,13 @@ the projector and press <kbd>F</kbd> for fullscreen.
 4. **Projector** — for each set, drag A–D (Edit tool) until each projected
    marker sits on its real reference point. *Draw* lets you trace polygons
    directly on the projected surface, into the active set. <kbd>G</kbd>
-   toggles the active set's alignment grid, <kbd>H</kbd> hides the handles
+   toggles the active set's alignment grid (the true-geometry grid, drawn as
+   an unbounded plane, so it appears wherever the set sits), <kbd>H</kbd> hides the handles
    and controls, <kbd>R</kbd> resets the active set's corners.
 5. **Camera** — start the webcam and, for each set, drag A–D onto the same
    four features as the camera sees them (Edit tool). The polygons are drawn
-   over the video, and *Draw* lets you trace new ones over what the camera
+   over the video, along with the active set's grid (a checkbox turns it
+   off), and *Draw* lets you trace new ones over what the camera
    sees, into the active set. With the Edit tool, hover the image, or pick a
    detection mode (brightest spot or motion), and the detected point is
    converted to true-geometry coordinates and sent to the other pages, which

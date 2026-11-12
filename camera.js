@@ -32,6 +32,7 @@
   const readoutEl = document.getElementById('readout');
   const setsEl = document.getElementById('sets');
   const deviceEl = document.getElementById('device');
+  const gridEl = document.getElementById('grid');
   const view = PM.openView('camera');
 
   // Small offscreen copy of each frame for the pixel-based detectors.
@@ -122,6 +123,12 @@
     view.data().device = deviceEl.value;
     view.save();
     if (stream) { stop(); await start(); }
+  };
+
+  gridEl.checked = view.data().grid !== false;
+  gridEl.onchange = () => {
+    view.data().grid = gridEl.checked;
+    view.save();
   };
 
   startBtn.onclick = () => (stream ? stop() : start());
@@ -224,6 +231,12 @@
     ctx.beginPath();
     ctx.rect(frame.x, frame.y, frame.w, frame.h);
     ctx.clip();
+    const activeMap = maps.find((m) => m.set === active);
+    if (gridEl.checked && activeMap && activeMap.worldToCam) {
+      // Straight to canvas pixels, so the grid can be clipped at the horizon.
+      const toPixels = PM.solveHomography(active.refs, activeMap.quad.map(toPx));
+      if (toPixels) PM.drawGrid(ctx, toPixels, frame, active.refs);
+    }
     for (const m of maps) {
       PM.drawPolygons(ctx, (p) => {
         const c = PM.applyHomography(m.worldToCam, p);
