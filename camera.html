@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Camera · Projection Mapping</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="app">
+  <aside>
+    <h1>3 · Camera</h1>
+    <nav>
+      <a href="index.html" target="_blank">Geometry ↗</a>
+      <a href="projector.html" target="_blank">Projector ↗</a>
+      <a class="here" href="camera.html">Camera</a>
+    </nav>
+    <p>Drag A–D onto the places in the camera image where the true-geometry reference points really are. The polygons are then overlaid on the video, and anything detected is mapped back into the true geometry.</p>
+
+    <section>
+      <h2>Webcam</h2>
+      <div class="row">
+        <button id="start">Start webcam</button>
+        <button id="reset">Reset A–D</button>
+      </div>
+      <p id="status" style="margin-top:8px"></p>
+    </section>
+
+    <section>
+      <h2>Detection</h2>
+      <select id="mode">
+        <option value="none">Pointer only</option>
+        <option value="bright">Brightest spot (torch / laser)</option>
+        <option value="motion">Motion</option>
+      </select>
+      <label class="check" style="margin-top:8px">Sensitivity
+        <input type="range" id="sensitivity" min="0" max="100" value="60">
+      </label>
+      <p style="margin-top:8px">Hovering over the image always sends that point, so you can test the mapping without a camera.</p>
+    </section>
+
+    <section>
+      <h2>Mapped to true geometry</h2>
+      <div class="readout" id="readout">—</div>
+    </section>
+  </aside>
+
+  <main><canvas id="canvas"></canvas></main>
+  <video id="video" playsinline muted hidden></video>
+
+  <script src="shared.js"></script>
+  <script src="camera.js"></script>
+</body>
+</html>

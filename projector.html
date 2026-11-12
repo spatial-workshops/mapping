@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Projector · Projection Mapping</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="projector">
+  <canvas id="canvas"></canvas>
+
+  <div id="bar">
+    <strong>2 · Projector</strong>
+    <nav>
+      <a href="index.html" target="_blank">Geometry ↗</a>
+      <a href="camera.html" target="_blank">Camera ↗</a>
+    </nav>
+    <button id="fullscreen">Fullscreen <kbd>F</kbd></button>
+    <button id="grid">Grid <kbd>G</kbd></button>
+    <button id="reset">Reset corners <kbd>R</kbd></button>
+    <button id="hide">Hide controls <kbd>H</kbd></button>
+    <span class="hint">Drag A–D until each lands on its real-world reference point.</span>
+  </div>
+
+  <script src="shared.js"></script>
+  <script src="projector.js"></script>
+</body>
+</html>
