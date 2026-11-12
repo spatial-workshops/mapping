@@ -7,8 +7,9 @@
 // Every polygon belongs to one mapping set.
 //
 // Topics on the BroadcastChannel (each is owned by one page):
-//   geometry   -> { polygons, sets }      owned by index.html; a set's `refs`
-//                                         are its A–D in true-geometry units
+//   geometry   -> { polygons, sets }      editable from every page (re-broadcast
+//                                         by index.html); a set's `refs` are its
+//                                         A–D in true-geometry units
 //   projector  -> { setId: [[x,y] x4] }   owned by projector.html (normalised to window)
 //   camera     -> { setId: [[x,y] x4] }   owned by camera.html    (normalised to video frame)
 //   detections -> [{x,y,source,setId}]    owned by camera.html    (true-geometry coordinates)
@@ -354,7 +355,7 @@ const PM = (() => {
 
   return {
     WORLD, REF_LABELS, PALETTE, state,
-    init, publish, uid,
+    init, publish, uid, defaultRefs,
     sets, activeSet, setActive, addSet, quad, resetQuad,
     polygonsAt, describeDetections, pickHandle, drawQuad, fillSetSelect,
     solveHomography, invertHomography, applyHomography,

@@ -19,7 +19,14 @@ found from the camera.
 | `camera.html` | `camera.js` | **Camera.** Starts a webcam. Drag a set's A–D to where those points appear in the camera image; the set's second homography overlays its polygons on the video and maps detected points back into the true geometry. |
 
 `shared.js` holds what all three need: the channel, saved state, and the
-homography maths. `style.css` is the shared styling.
+homography maths. `editor.js` is the polygon drawing and editing tool used by
+all three pages. `style.css` is the shared styling.
+
+Polygons can be drawn and edited in **every** view. They are always stored in
+true-geometry coordinates: a corner clicked on the projector or on the camera
+image is first sent through the inverse of the active mapping set's
+homography for that view, so it stays exactly where you clicked it there and
+appears in the right place in the other two views.
 
 ## Running it
 
@@ -46,13 +53,15 @@ the projector and press <kbd>F</kbd> for fullscreen.
    the active set; the dropdown under a selected polygon's name moves it to
    another set. The active set is shared by all three pages, and grabbing any
    set's handle on any page makes that set active.
-3. **Projector** — for each set, drag A–D until each projected marker sits on
-   its real reference point. <kbd>G</kbd> toggles the active set's alignment
+3. **Projector** — for each set, drag A–D (Edit tool) until each projected
+   marker sits on its real reference point. *Draw* lets you trace polygons
+   directly on the projected surface, into the active set. <kbd>G</kbd> toggles the active set's alignment
    grid, <kbd>H</kbd> hides the handles and controls, <kbd>R</kbd> resets the
    active set's corners.
 4. **Camera** — start the webcam and, for each set, drag A–D onto the same
-   four features as the camera sees them. The polygons are drawn over the
-   video. Hover the image, or pick a detection mode (brightest spot or
+   four features as the camera sees them (Edit tool). The polygons are drawn
+   over the video, and *Draw* lets you trace new ones over what the camera
+   sees, into the active set. With the Edit tool, hover the image, or pick a detection mode (brightest spot or
    motion), and the detected point is converted to true-geometry coordinates
    and sent to the other two pages, which mark it and highlight any polygon it
    falls inside.
@@ -74,6 +83,11 @@ A point detected in the camera is tried against every set's inverse `H_c`. It
 is attributed to the sets where it lands inside one of that set's polygons;
 failing that, to the sets whose A–D outline contains it in the camera image;
 failing that, to the active set.
+
+Drawing in the projector or camera view applies the inverse of that view's
+homography for the active set to each clicked corner (`toWorld` in
+`projector.js` and `camera.js`), which is how the shared editor stays unaware
+of which view it is in.
 
 Straight lines stay straight under a homography, so warping a polygon only
 requires transforming its vertices.

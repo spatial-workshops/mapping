@@ -88,12 +88,13 @@ label.check { display: flex; gap: 6px; align-items: center; color: #a4abb8; font
 body.projector { background: #000; overflow: hidden; }
 body.projector canvas { position: fixed; inset: 0; }
 #bar {
-  position: fixed; top: 12px; left: 12px; right: 12px;
+  position: fixed; bottom: 12px; left: 12px; right: 12px;
   display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
   padding: 8px 10px; border-radius: 10px;
   background: rgba(28, 31, 37, 0.9); border: 1px solid #2c313a;
 }
-#bar .hint { color: #8b93a1; font-size: 12.5px; margin-left: auto; }
+#bar .hint { color: #8b93a1; font-size: 12.5px; flex-basis: 100%; }
+#bar button:disabled { opacity: 0.4; cursor: default; }
 body.clean #bar { display: none; }
 body.clean { cursor: none; }
 kbd {

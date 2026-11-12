@@ -16,14 +16,20 @@
       <a href="camera.html" target="_blank">Camera ↗</a>
     </nav>
     <select id="set" title="Active mapping set" style="width:auto"></select>
+    <button id="tool-draw">Draw <kbd>D</kbd></button>
+    <button id="tool-edit">Edit <kbd>E</kbd></button>
+    <input type="color" id="color" value="#ff5a5f" title="Colour">
+    <input type="text" id="name" placeholder="Polygon name" style="width:150px" disabled>
+    <button id="delete" class="danger" title="Delete the selected polygon">Delete</button>
     <button id="fullscreen">Fullscreen <kbd>F</kbd></button>
     <button id="grid">Grid <kbd>G</kbd></button>
     <button id="reset">Reset corners <kbd>R</kbd></button>
     <button id="hide">Hide controls <kbd>H</kbd></button>
-    <span class="hint">Drag each set's A–D onto its real-world reference points.</span>
+    <span class="hint" id="hint"></span>
   </div>
 
   <script src="shared.js"></script>
+  <script src="editor.js"></script>
   <script src="projector.js"></script>
 </body>
 </html>

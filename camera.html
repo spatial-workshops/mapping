@@ -14,11 +14,32 @@
       <a href="projector.html" target="_blank">Projector ↗</a>
       <a class="here" href="camera.html">Camera</a>
     </nav>
-    <p>For each mapping set, drag A–D onto the places in the camera image where its reference points really are. The polygons are then overlaid on the video, and anything detected is mapped back into the true geometry.</p>
+    <p>For each mapping set, drag A–D onto the places in the camera image where its reference points really are. Polygons are overlaid on the video and can be drawn straight onto it; anything detected is mapped back into the true geometry.</p>
 
     <section>
       <h2>Mapping set</h2>
       <select id="set"></select>
+    </section>
+
+    <section>
+      <h2>Tool</h2>
+      <div class="row">
+        <button id="tool-draw">Draw</button>
+        <button id="tool-edit">Edit</button>
+      </div>
+      <p id="hint" style="margin-top:8px"></p>
+    </section>
+
+    <section>
+      <h2>Polygon</h2>
+      <div class="row">
+        <input type="color" id="color" value="#ff5a5f" title="Colour">
+        <input type="text" id="name" placeholder="Name" disabled>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <select id="poly-set" title="Mapping set this polygon belongs to" disabled></select>
+      </div>
+      <ul id="list" class="list" style="margin-top:8px"></ul>
     </section>
 
     <section>
@@ -40,7 +61,7 @@
       <label class="check" style="margin-top:8px">Sensitivity
         <input type="range" id="sensitivity" min="0" max="100" value="60">
       </label>
-      <p style="margin-top:8px">Hovering over the image always sends that point, so you can test the mapping without a camera.</p>
+      <p style="margin-top:8px">With the Edit tool, hovering over the image also sends that point, so you can test the mapping without a camera.</p>
     </section>
 
     <section>
@@ -53,6 +74,7 @@
   <video id="video" playsinline muted hidden></video>
 
   <script src="shared.js"></script>
+  <script src="editor.js"></script>
   <script src="camera.js"></script>
 </body>
 </html>

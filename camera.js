@@ -9,6 +9,10 @@
 // sets where it lands inside one of that set's polygons; failing that, to the
 // sets whose A–D outline contains it; failing that, to the active set.
 //
+// Drawing here uses the same inverse: a corner clicked on the video is mapped
+// through the active set's camera -> true geometry homography before it is
+// stored, so polygons can be traced over what the camera sees.
+//
 // Camera coordinates are normalised (0..1) to the video frame so they do not
 // depend on how large the video is drawn.
 
@@ -30,7 +34,6 @@
 
   let stream = null;
   let frame = { x: 0, y: 0, w: 1, h: 1 }; // where the video is drawn on the canvas
-  let dragging = null;     // { set, index }
   let pointer = null;      // hovered point, normalised to the video frame
   let prevLuma = null;     // earlier frame, for motion detection
   let prevTime = 0;
@@ -39,6 +42,21 @@
   const toPx = ([x, y]) => [frame.x + x * frame.w, frame.y + y * frame.h];
   const toNorm = (x, y) => [(x - frame.x) / frame.w, (y - frame.y) / frame.h];
   const handlesPx = (set) => PM.quad('camera', set).map(toPx);
+  const homography = (set) => PM.solveHomography(set.refs, PM.quad('camera', set)); // true geometry -> video frame
+
+  const editor = PM.createEditor({
+    canvas,
+    toScreen(set, p) {
+      const c = PM.applyHomography(homography(set), p);
+      return c && toPx(c);
+    },
+    toWorld: (set, x, y) => PM.applyHomography(PM.invertHomography(homography(set)), toNorm(x, y)),
+    handlesOf: handlesPx,
+    moveHandle(set, index, x, y) {
+      PM.quad('camera', set)[index] = toNorm(x, y).map((v) => Math.max(0, Math.min(1, v)));
+      PM.publish('camera');
+    },
+  });
   const live = () => stream && video.videoWidth > 0;
 
   // ---- Webcam -----------------------------------------------------------
@@ -71,7 +89,7 @@
 
   startBtn.onclick = () => (stream ? stop() : start());
   document.getElementById('reset').onclick = () => PM.resetQuad('camera', PM.activeSet());
-  setSelect.onchange = () => PM.setActive(setSelect.value);
+  setSelect.onchange = () => { editor.activate(setSelect.value); setSelect.blur(); };
   modeEl.onchange = () => { prevLuma = null; };
 
   // ---- Detection --------------------------------------------------------
@@ -174,9 +192,10 @@
       PM.drawPolygons(ctx, (p) => {
         const c = PM.applyHomography(m.worldToCam, p);
         return c && toPx(c);
-      }, { setId: m.set.id });
+      }, { setId: m.set.id, selectedId: editor.selectedId });
     }
     ctx.restore();
+    editor.drawOverlay(ctx);
 
     for (const f of found) PM.drawDetection(ctx, ...toPx(f.cam));
 
@@ -194,36 +213,16 @@
     readoutEl.textContent = PM.describeDetections();
   }
 
-  // ---- Handle dragging and pointer probe ----------------------------------
-
-  function pointerPos(e) {
-    const r = canvas.getBoundingClientRect();
-    return [e.clientX - r.left, e.clientY - r.top];
-  }
-
-  canvas.addEventListener('pointerdown', (e) => {
-    dragging = PM.pickHandle(handlesPx, ...pointerPos(e), 16);
-    if (!dragging) return;
-    canvas.setPointerCapture(e.pointerId);
-    PM.setActive(dragging.set.id); // grabbing a handle makes its set the active one
-  });
+  // ---- Pointer probe ------------------------------------------------------
+  // With the Edit tool, the hovered point stands in for a detection.
 
   canvas.addEventListener('pointermove', (e) => {
-    const [x, y] = pointerPos(e);
-    const [nx, ny] = toNorm(x, y);
-    if (dragging) {
-      PM.quad('camera', dragging.set)[dragging.index] = [Math.max(0, Math.min(1, nx)), Math.max(0, Math.min(1, ny))];
-      PM.publish('camera');
-      pointer = null;
-      return;
-    }
+    const r = canvas.getBoundingClientRect();
+    const [nx, ny] = toNorm(e.clientX - r.left, e.clientY - r.top);
     const inside = nx >= 0 && nx <= 1 && ny >= 0 && ny <= 1;
-    pointer = inside ? [nx, ny] : null;
-    canvas.style.cursor = PM.pickHandle(handlesPx, x, y, 16) ? 'grab' : 'crosshair';
+    pointer = inside && editor.tool === 'edit' && !editor.busy ? [nx, ny] : null;
   });
 
-  canvas.addEventListener('pointerup', () => { dragging = null; });
-  canvas.addEventListener('pointercancel', () => { dragging = null; });
   canvas.addEventListener('pointerleave', () => { pointer = null; });
 
   // Don't leave a stale marker on the other pages when this one closes.
@@ -232,6 +231,9 @@
     PM.publish('detections');
   });
 
-  PM.init(['camera', 'detections'], (topic) => { if (topic === 'geometry') updateReadout(); });
+  PM.init(['camera', 'detections'], (topic) => {
+    editor.sync(topic);
+    if (topic === 'geometry') updateReadout();
+  });
   requestAnimationFrame(tick);
 })();
