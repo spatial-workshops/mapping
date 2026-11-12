@@ -7,18 +7,24 @@
 // Drawing here goes the other way: a corner clicked on the projector is sent
 // through the inverse of the active set's homography and stored in true
 // geometry, so it reappears exactly where it was clicked.
+//
+// This tab is one projector "view" (?view=N). Each view keeps its own handles
+// and its own choice of which mapping sets it shows, so several projectors
+// can run side by side in separate tabs.
 
 (() => {
   const { WORLD, state } = PM;
   const canvas = document.getElementById('canvas');
-  const setSelect = document.getElementById('set');
+  const setsEl = document.getElementById('sets');
+  const view = PM.openView('projector');
 
   let showGrid = true;
   let clean = false;   // true = output only: no handles, no controls
   let size = { w: 1, h: 1 };
 
-  const handlesPx = (set) => PM.quad('projector', set).map(([x, y]) => [x * size.w, y * size.h]);
-  const homography = (set) => PM.solveHomography(set.refs, handlesPx(set)); // true geometry -> pixels
+  const quadPx = (set) => view.quad(set).map(([x, y]) => [x * size.w, y * size.h]);
+  const handlesPx = (set) => (view.visible(set) ? quadPx(set) : []); // hidden sets can't be grabbed
+  const homography = (set) => PM.solveHomography(set.refs, quadPx(set)); // true geometry -> pixels
 
   const editor = PM.createEditor({
     canvas,
@@ -26,12 +32,21 @@
     toWorld: (set, x, y) => PM.applyHomography(PM.invertHomography(homography(set)), [x, y]),
     handlesOf: handlesPx,
     moveHandle(set, index, x, y) {
-      PM.quad('projector', set)[index] = [x / size.w, y / size.h];
-      PM.publish('projector');
+      view.quad(set)[index] = [x / size.w, y / size.h];
+      view.save();
     },
     render,
     enabled: () => !clean,
+    visible: view.visible,
+    onRefresh: refreshSets,
   });
+
+  function refreshSets() {
+    PM.renderSetToggles(setsEl, view, {
+      onToggle() { editor.refresh(); render(); },
+      onActivate: (set) => editor.activate(set.id),
+    });
+  }
 
   function render() {
     const { ctx, w, h } = PM.fitCanvas(canvas);
@@ -39,13 +54,13 @@
     ctx.fillStyle = '#000';
     ctx.fillRect(0, 0, w, h);
 
-    if (document.activeElement !== setSelect) PM.fillSetSelect(setSelect, state.active);
-    for (const set of PM.sets()) renderSet(ctx, set, w, h);
+    const shown = view.visibleSets();
+    for (const set of shown) renderSet(ctx, set, w, h);
     if (!clean) {
       editor.drawOverlay(ctx);
       // Active set last so its handles sit on top.
       const active = PM.activeSet();
-      for (const set of [...PM.sets().filter((s) => s !== active), active]) PM.drawQuad(ctx, handlesPx(set), set);
+      for (const set of [...shown.filter((s) => s !== active), ...shown.filter((s) => s === active)]) PM.drawQuad(ctx, quadPx(set), set);
     }
   }
 
@@ -86,7 +101,7 @@
       else document.documentElement.requestFullscreen();
     },
     grid() { showGrid = !showGrid; render(); },
-    reset() { PM.resetQuad('projector', PM.activeSet()); render(); },
+    reset() { view.resetQuad(PM.activeSet()); render(); },
     hide() {
       clean = !clean;
       document.body.classList.toggle('clean', clean);
@@ -96,7 +111,7 @@
 
   for (const id of Object.keys(actions)) document.getElementById(id).onclick = actions[id];
 
-  setSelect.onchange = () => { editor.activate(setSelect.value); setSelect.blur(); };
+  PM.bindViewControls(view, 'Projector', document.getElementById('view'), document.getElementById('new-view'));
 
   window.addEventListener('keydown', (e) => {
     if (e.target.matches('input[type="text"], select')) return;
@@ -104,7 +119,11 @@
     if (action) actions[action]();
   });
 
-  PM.init(['projector'], (topic) => { editor.sync(topic); render(); });
+  PM.init((topic, key) => {
+    editor.sync(topic);
+    if (topic === 'projector' && key === view.id) editor.refresh(); // a mirroring tab changed this view
+    render();
+  }, view.save);
   window.addEventListener('resize', render);
   render();
 })();

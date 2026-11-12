@@ -8,7 +8,10 @@
 </head>
 <body class="app">
   <aside>
-    <h1>3 · Camera</h1>
+    <div class="row">
+      <select id="view" title="Which camera this tab is"></select>
+      <button id="new-view" title="Open another camera in a new tab" style="flex:none">＋</button>
+    </div>
     <nav>
       <a href="index.html" target="_blank">Geometry ↗</a>
       <a href="projector.html" target="_blank">Projector ↗</a>
@@ -17,8 +20,9 @@
     <p>For each mapping set, drag A–D onto the places in the camera image where its reference points really are. Polygons are overlaid on the video and can be drawn straight onto it; anything detected is mapped back into the true geometry.</p>
 
     <section>
-      <h2>Mapping set</h2>
-      <select id="set"></select>
+      <h2>Mapping sets</h2>
+      <p>Tick the sets this camera can see. Click a name to make it the active set.</p>
+      <ul id="sets" class="list" style="margin-top:8px"></ul>
     </section>
 
     <section>
@@ -48,6 +52,7 @@
         <button id="start">Start webcam</button>
         <button id="reset">Reset A–D</button>
       </div>
+      <select id="device" title="Which webcam to use" style="margin-top:8px"><option value="">Default webcam</option></select>
       <p id="status" style="margin-top:8px"></p>
     </section>
 

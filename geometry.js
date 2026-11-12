@@ -299,9 +299,12 @@
 
   // ---- Boot -------------------------------------------------------------
 
-  PM.init(['geometry', 'active'], (topic) => {
+  PM.init((topic) => {
     editor.sync(topic);
     if (topic === 'detections') { detectedEl.textContent = PM.describeDetections(); render(); }
+  }, () => {
+    PM.publish('geometry');
+    PM.publish('active');
   });
 
   new ResizeObserver(render).observe(canvas);

@@ -71,6 +71,9 @@ label.check { display: flex; gap: 6px; align-items: center; color: #a4abb8; font
   border: 1px solid transparent;
 }
 .list li:hover { background: #262b33; }
+.list.inline { flex-direction: row; flex-wrap: wrap; }
+.list.inline li { padding: 3px 8px; }
+.list input[type="checkbox"] { margin: 0; }
 .list li.selected { border-color: #3d9bff; background: #232a36; }
 .list .swatch { width: 14px; height: 14px; border-radius: 3px; flex: none; }
 .list .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

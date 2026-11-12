@@ -28,6 +28,12 @@ image is first sent through the inverse of the active mapping set's
 homography for that view, so it stays exactly where you clicked it there and
 appears in the right place in the other two views.
 
+Any number of projector and camera tabs can be open at once. Each is a
+numbered **view** (`projector.html?view=2`, `camera.html?view=3`, …) with its
+own A–D handles and its own checkboxes for which mapping sets it shows, so
+each tab can drive a different projector or watch a different webcam. Tabs
+opened on the same view number mirror each other.
+
 ## Running it
 
 The webcam and BroadcastChannel both need the pages to share an `http://`
@@ -64,16 +70,23 @@ the projector and press <kbd>F</kbd> for fullscreen.
    a guide: geometry can be placed anywhere.
 4. **Projector** — for each set, drag A–D (Edit tool) until each projected
    marker sits on its real reference point. *Draw* lets you trace polygons
-   directly on the projected surface, into the active set. <kbd>G</kbd> toggles the active set's alignment
-   grid, <kbd>H</kbd> hides the handles and controls, <kbd>R</kbd> resets the
-   active set's corners.
+   directly on the projected surface, into the active set. <kbd>G</kbd>
+   toggles the active set's alignment grid, <kbd>H</kbd> hides the handles
+   and controls, <kbd>R</kbd> resets the active set's corners.
 5. **Camera** — start the webcam and, for each set, drag A–D onto the same
    four features as the camera sees them (Edit tool). The polygons are drawn
    over the video, and *Draw* lets you trace new ones over what the camera
-   sees, into the active set. With the Edit tool, hover the image, or pick a detection mode (brightest spot or
-   motion), and the detected point is converted to true-geometry coordinates
-   and sent to the other two pages, which mark it and highlight any polygon it
-   falls inside.
+   sees, into the active set. With the Edit tool, hover the image, or pick a
+   detection mode (brightest spot or motion), and the detected point is
+   converted to true-geometry coordinates and sent to the other pages, which
+   mark it and highlight any polygon it falls inside.
+6. **Several projectors or cameras** — the **＋** button next to the view
+   selector opens another projector or camera in a new tab; the selector
+   switches a tab to a different view. In each view, tick the mapping sets it
+   should show: unticked sets are not drawn, cannot be edited there and (on a
+   camera) are ignored for detection. Each camera view also remembers which
+   webcam it uses. Keep each camera in its own window — browsers pause video
+   processing in background tabs.
 
 ## How it works
 
@@ -101,8 +114,10 @@ of which view it is in.
 Straight lines stay straight under a homography, so warping a polygon only
 requires transforming its vertices.
 
-Messages on the channel are `{ topic, data }`. Each topic has one owning page:
-`geometry` (polygons and mapping sets with their reference points),
-`projector` and `camera` (handle positions per set), `detections` and
-`active` (the set being edited). State is also kept in `localStorage`, and a
-newly opened page sends `hello` so the others re-broadcast what they own.
+Messages on the channel are `{ topic, key, data }`: `geometry` (polygons and
+mapping sets with their reference points), `active` (the set being edited),
+`projector` and `camera` (one view's handles and hidden sets, keyed by view
+number) and `detections` (keyed by camera tab, so several cameras can report
+at once). Views are sent and saved one at a time, so tabs never overwrite each
+other's handles. State is also kept in `localStorage`, and a newly opened page
+sends `hello` so the others re-broadcast what they hold.

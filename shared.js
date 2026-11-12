@@ -6,15 +6,23 @@
 // homographies (true geometry -> projector, true geometry <-> camera).
 // Every polygon belongs to one mapping set.
 //
-// Topics on the BroadcastChannel (each is owned by one page):
-//   geometry   -> { polygons, sets }      editable from every page (re-broadcast
-//                                         by index.html); a set's `refs` are its
-//                                         A–D in true-geometry units
-//   projector  -> { setId: [[x,y] x4] }   owned by projector.html (normalised to window)
-//   camera     -> { setId: [[x,y] x4] }   owned by camera.html    (normalised to video frame)
-//   detections -> [{x,y,source,setId}]    owned by camera.html    (true-geometry coordinates)
-//   active     -> setId                   the set being edited, shared by all pages
-//   hello      -> a page just opened; owners re-broadcast what they own
+// The projector and camera pages are "views". Any number of each can be
+// open: a view is named by the `?view=` number in its URL (default 1) and has
+// its own handles and its own choice of visible sets, so two projector tabs
+// with different numbers are two independent projectors. Tabs opened on the
+// same view number mirror each other.
+//
+// Messages on the BroadcastChannel are { topic, key?, data }:
+//   geometry            { polygons, sets }; editable from every page. A set's
+//                       `refs` are its A–D in true-geometry units
+//   active              id of the set being edited, shared by all pages
+//   projector, key=view { quads: { setId: [[x,y] x4] }, hidden: { setId: true } }
+//                       one projector view; quads normalised to the window
+//   camera,    key=view the same for one camera view; quads normalised to the
+//                       video frame
+//   detections, key=tab [{ x, y, source, setId, view }] in true-geometry
+//                       coordinates, from one camera tab
+//   hello               a page just opened; the others re-broadcast their own state
 
 const PM = (() => {
   const WORLD = { w: 1200, h: 800 }; // extent of the "true geometry" drawing space
@@ -32,25 +40,35 @@ const PM = (() => {
     return [[a, a], [1 - a, a], [1 - a, 1 - a], [a, 1 - a]];
   };
 
-  const PERSISTED = ['geometry', 'projector', 'camera', 'active'];
+  const PERSISTED = ['geometry', 'active'];
+  const VIEW_TOPICS = ['projector', 'camera'];
   const state = {
     geometry: {
       polygons: [], // { id, name, color, setId, points: [[x,y], ...] }
       sets: [],     // { id, name, color, refs: [[x,y] x4] }
     },
-    projector: {},
-    camera: {},
     active: null,
-    detections: [],
+    projector: {},  // view id -> { quads, hidden }
+    camera: {},     // view id -> { quads, hidden }
+    detections: [], // every camera tab's detections, flattened (read-only)
   };
+  const detectionsByTab = {};
   const listeners = [];
-  let owned = [];
+  let onHello = () => {};
+
+  const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  const tabId = uid();
+
+  const read = (key) => {
+    try { return JSON.parse(localStorage.getItem(key)); } catch (err) { return null; }
+  };
+  const write = (key, value) => {
+    try { localStorage.setItem(key, JSON.stringify(value)); } catch (err) { /* storage unavailable */ }
+  };
 
   for (const topic of PERSISTED) {
-    try {
-      const saved = JSON.parse(localStorage.getItem('pm:' + topic));
-      if (saved) state[topic] = saved;
-    } catch (err) { /* storage unavailable or corrupt: keep defaults */ }
+    const saved = read('pm:' + topic);
+    if (saved) state[topic] = saved;
   }
 
   // Keep the state self-consistent (and upgrade data saved before mapping
@@ -63,13 +81,30 @@ const PM = (() => {
     }
     const first = g.sets[0].id;
     for (const poly of g.polygons) if (!g.sets.some((s) => s.id === poly.setId)) poly.setId = first;
-    for (const t of ['projector', 'camera']) {
-      if (Array.isArray(state[t])) state[t] = { [first]: state[t] };
-      else if (!state[t]) state[t] = {};
-    }
     if (!g.sets.some((s) => s.id === state.active)) state.active = first;
   }
   normalise();
+
+  // Each view is saved under its own key so tabs never overwrite each other.
+  for (const topic of VIEW_TOPICS) {
+    const prefix = `pm:${topic}:`;
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key.startsWith(prefix)) state[topic][key.slice(prefix.length)] = read(key) || {};
+      }
+      // Upgrade data saved when there was only one projector and one camera.
+      const legacy = read('pm:' + topic);
+      if (legacy) {
+        const quads = Array.isArray(legacy) ? { [state.geometry.sets[0].id]: legacy } : legacy;
+        if (!state[topic]['1']) {
+          state[topic]['1'] = { quads, hidden: {} };
+          write(prefix + '1', state[topic]['1']);
+        }
+        localStorage.removeItem('pm:' + topic);
+      }
+    } catch (err) { /* storage unavailable */ }
+  }
 
   const sets = () => state.geometry.sets;
   const activeSet = () => sets().find((s) => s.id === state.active) || sets()[0];
@@ -89,46 +124,133 @@ const PM = (() => {
     return set;
   }
 
-  // A set's four points on the projector or camera page ('projector' | 'camera').
-  function quad(topic, set) {
-    if (!state[topic][set.id]) state[topic][set.id] = defaultQuad(sets().indexOf(set));
-    return state[topic][set.id];
-  }
-
-  function resetQuad(topic, set) {
-    state[topic][set.id] = defaultQuad(sets().indexOf(set));
-    publish(topic);
-  }
-
-  const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-
   const channel = new BroadcastChannel('projection-mapping');
 
   channel.onmessage = (e) => {
-    const { topic, data } = e.data || {};
-    if (topic === 'hello') {
-      owned.forEach((t) => channel.postMessage({ topic: t, data: state[t] }));
+    const { topic, key, data } = e.data || {};
+    if (topic === 'hello') { onHello(); return; }
+    if (topic === 'detections') {
+      setTabDetections(key, data);
+    } else if (VIEW_TOPICS.includes(topic)) {
+      state[topic][key] = data;
+    } else if (PERSISTED.includes(topic)) {
+      state[topic] = data;
+      normalise();
+    } else {
       return;
     }
-    if (!(topic in state)) return;
-    state[topic] = data;
-    normalise();
-    listeners.forEach((fn) => fn(topic));
+    listeners.forEach((fn) => fn(topic, key));
   };
 
-  // Call once per page with the topics that page is the source of truth for.
-  function init(ownedTopics, onChange) {
-    owned = ownedTopics;
+  // Call once per page. `onChange(topic, key)` runs when another tab changes
+  // something; `rebroadcast` should re-publish what this page is showing, for
+  // the benefit of a tab that has just opened.
+  function init(onChange, rebroadcast) {
     if (onChange) listeners.push(onChange);
+    if (rebroadcast) onHello = rebroadcast;
     channel.postMessage({ topic: 'hello' });
   }
 
-  // Save and broadcast a topic after mutating PM.state[topic].
+  // Save and broadcast 'geometry' or 'active' after mutating PM.state.
   function publish(topic) {
-    if (PERSISTED.includes(topic)) {
-      try { localStorage.setItem('pm:' + topic, JSON.stringify(state[topic])); } catch (err) { /* ignore */ }
-    }
+    write('pm:' + topic, state[topic]);
     channel.postMessage({ topic, data: state[topic] });
+  }
+
+  // ---- Views (one projector or one camera) ---------------------------------
+
+  // The view this page shows, from `?view=` in the URL. Its data is looked up
+  // on every call because a mirroring tab may replace it at any time.
+  function openView(topic) {
+    const id = new URLSearchParams(location.search).get('view') || '1';
+    const data = () => {
+      const v = state[topic][id] || (state[topic][id] = {});
+      if (!v.quads) v.quads = {};
+      if (!v.hidden) v.hidden = {};
+      return v;
+    };
+    const save = () => {
+      write(`pm:${topic}:${id}`, data());
+      channel.postMessage({ topic, key: id, data: data() });
+    };
+    const ids = () => [...new Set([...Object.keys(state[topic]), id])].sort((a, b) => a - b || a.localeCompare(b));
+    const view = {
+      id, topic, data, save, ids,
+      // A set's four handles in this view, normalised 0..1.
+      quad(set) {
+        const quads = data().quads;
+        return quads[set.id] || (quads[set.id] = defaultQuad(sets().indexOf(set)));
+      },
+      resetQuad(set) {
+        data().quads[set.id] = defaultQuad(sets().indexOf(set));
+        save();
+      },
+      visible: (set) => !data().hidden[set.id],
+      setVisible(set, on) {
+        if (on) delete data().hidden[set.id];
+        else data().hidden[set.id] = true;
+        save();
+      },
+      visibleSets: () => sets().filter(view.visible),
+      nextId: () => String(Math.max(0, ...ids().map(Number).filter(Number.isFinite)) + 1),
+    };
+    save(); // so other tabs list this view
+    return view;
+  }
+
+  // Checkbox list of mapping sets for a view: the checkbox shows or hides the
+  // set in that view, clicking the name makes it the active set.
+  function renderSetToggles(listEl, view, { onToggle, onActivate }) {
+    listEl.innerHTML = '';
+    for (const set of sets()) {
+      const li = document.createElement('li');
+      li.classList.toggle('selected', set === activeSet());
+      li.title = 'Click to make this the active set';
+      const box = document.createElement('input');
+      box.type = 'checkbox';
+      box.checked = view.visible(set);
+      box.title = 'Show in this view';
+      box.onclick = (e) => e.stopPropagation();
+      box.onchange = () => { view.setVisible(set, box.checked); onToggle(set); };
+      const dot = document.createElement('span');
+      dot.className = 'swatch';
+      dot.style.cssText = `background:${set.color};border-radius:50%`;
+      const name = document.createElement('span');
+      name.className = 'name';
+      name.textContent = set.name;
+      li.onclick = () => onActivate(set);
+      li.append(box, dot, name);
+      listEl.append(li);
+    }
+  }
+
+  // "Projector 1 / Projector 2 / ..." switcher plus an "open another" button.
+  function bindViewControls(view, label, select, newButton) {
+    const fill = () => {
+      select.innerHTML = '';
+      for (const id of view.ids()) select.add(new Option(`${label} ${id}`, id));
+      select.value = view.id;
+    };
+    fill();
+    document.title = `${label} ${view.id} · Projection Mapping`;
+    select.onfocus = fill;
+    select.onchange = () => { location.search = '?view=' + encodeURIComponent(select.value); };
+    newButton.onclick = () => window.open(`${location.pathname}?view=${view.nextId()}`, '_blank');
+    return fill;
+  }
+
+  // ---- Detections ---------------------------------------------------------
+
+  function setTabDetections(tab, list) {
+    if (list && list.length) detectionsByTab[tab] = list;
+    else delete detectionsByTab[tab];
+    state.detections = Object.values(detectionsByTab).flat();
+  }
+
+  // Replace this tab's detections (other camera tabs keep theirs).
+  function publishDetections(list) {
+    setTabDetections(tabId, list);
+    channel.postMessage({ topic: 'detections', key: tabId, data: list });
   }
 
   // ---- Homography -------------------------------------------------------
@@ -221,7 +343,7 @@ const PM = (() => {
     return state.detections.map((d) => {
       const set = sets().find((s) => s.id === d.setId);
       const inside = polygonsAt(d).map((p) => p.name || '(unnamed)');
-      return `${d.source} · ${set ? set.name : '?'}: (${Math.round(d.x)}, ${Math.round(d.y)})`
+      return `cam ${d.view} ${d.source} · ${set ? set.name : '?'}: (${Math.round(d.x)}, ${Math.round(d.y)})`
         + (inside.length ? `\n  in ${inside.join(', ')}` : '');
     }).join('\n');
   }
@@ -356,7 +478,8 @@ const PM = (() => {
   return {
     WORLD, REF_LABELS, PALETTE, state,
     init, publish, uid, defaultRefs,
-    sets, activeSet, setActive, addSet, quad, resetQuad,
+    sets, activeSet, setActive, addSet,
+    openView, renderSetToggles, bindViewControls, publishDetections,
     polygonsAt, describeDetections, pickHandle, drawQuad, fillSetSelect,
     solveHomography, invertHomography, applyHomography,
     pointInPolygon, centroid, hitIds, pick,

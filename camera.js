@@ -13,6 +13,11 @@
 // through the active set's camera -> true geometry homography before it is
 // stored, so polygons can be traced over what the camera sees.
 //
+// This tab is one camera "view" (?view=N). Each view keeps its own handles,
+// its own choice of visible mapping sets and its own webcam, and publishes
+// its detections separately, so several cameras can run in separate tabs.
+// Hidden sets are neither drawn nor used for detection.
+//
 // Camera coordinates are normalised (0..1) to the video frame so they do not
 // depend on how large the video is drawn.
 
@@ -25,7 +30,9 @@
   const modeEl = document.getElementById('mode');
   const sensitivityEl = document.getElementById('sensitivity');
   const readoutEl = document.getElementById('readout');
-  const setSelect = document.getElementById('set');
+  const setsEl = document.getElementById('sets');
+  const deviceEl = document.getElementById('device');
+  const view = PM.openView('camera');
 
   // Small offscreen copy of each frame for the pixel-based detectors.
   const probe = document.createElement('canvas');
@@ -38,11 +45,12 @@
   let prevLuma = null;     // earlier frame, for motion detection
   let prevTime = 0;
   let lastSent = '[]';
+  let mine = [];           // this tab's current detections
 
   const toPx = ([x, y]) => [frame.x + x * frame.w, frame.y + y * frame.h];
   const toNorm = (x, y) => [(x - frame.x) / frame.w, (y - frame.y) / frame.h];
-  const handlesPx = (set) => PM.quad('camera', set).map(toPx);
-  const homography = (set) => PM.solveHomography(set.refs, PM.quad('camera', set)); // true geometry -> video frame
+  const handlesPx = (set) => (view.visible(set) ? view.quad(set).map(toPx) : []); // hidden sets can't be grabbed
+  const homography = (set) => PM.solveHomography(set.refs, view.quad(set)); // true geometry -> video frame
 
   const editor = PM.createEditor({
     canvas,
@@ -53,10 +61,19 @@
     toWorld: (set, x, y) => PM.applyHomography(PM.invertHomography(homography(set)), toNorm(x, y)),
     handlesOf: handlesPx,
     moveHandle(set, index, x, y) {
-      PM.quad('camera', set)[index] = toNorm(x, y).map((v) => Math.max(0, Math.min(1, v)));
-      PM.publish('camera');
+      view.quad(set)[index] = toNorm(x, y).map((v) => Math.max(0, Math.min(1, v)));
+      view.save();
     },
+    visible: view.visible,
+    onRefresh: refreshSets,
   });
+
+  function refreshSets() {
+    PM.renderSetToggles(setsEl, view, {
+      onToggle: () => editor.refresh(),
+      onActivate: (set) => editor.activate(set.id),
+    });
+  }
   const live = () => stream && video.videoWidth > 0;
 
   // ---- Webcam -----------------------------------------------------------
@@ -64,11 +81,16 @@
   async function start() {
     try {
       stream = await navigator.mediaDevices.getUserMedia({
-        video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'environment' },
+        video: {
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+          ...(view.data().device ? { deviceId: { exact: view.data().device } } : { facingMode: 'environment' }),
+        },
         audio: false,
       });
       video.srcObject = stream;
       await video.play();
+      await listDevices(); // labels are only available once permission is granted
       startBtn.textContent = 'Stop webcam';
       statusEl.textContent = '';
     } catch (err) {
@@ -87,9 +109,24 @@
     startBtn.textContent = 'Start webcam';
   }
 
+  // Each camera view remembers which webcam it uses.
+  async function listDevices() {
+    const cams = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'videoinput');
+    deviceEl.innerHTML = '';
+    deviceEl.add(new Option('Default webcam', ''));
+    cams.forEach((d, i) => deviceEl.add(new Option(d.label || `Webcam ${i + 1}`, d.deviceId)));
+    deviceEl.value = view.data().device || '';
+  }
+
+  deviceEl.onchange = async () => {
+    view.data().device = deviceEl.value;
+    view.save();
+    if (stream) { stop(); await start(); }
+  };
+
   startBtn.onclick = () => (stream ? stop() : start());
-  document.getElementById('reset').onclick = () => PM.resetQuad('camera', PM.activeSet());
-  setSelect.onchange = () => { editor.activate(setSelect.value); setSelect.blur(); };
+  document.getElementById('reset').onclick = () => view.resetQuad(PM.activeSet());
+  PM.bindViewControls(view, 'Camera', document.getElementById('view'), document.getElementById('new-view'));
   modeEl.onchange = () => { prevLuma = null; };
 
   // ---- Detection --------------------------------------------------------
@@ -147,12 +184,10 @@
       PM.drawLabel(ctx, 'Webcam not started', w / 2, h / 2, '#6f7785');
     }
 
-    if (document.activeElement !== setSelect) PM.fillSetSelect(setSelect, state.active);
-
-    // Both directions of every set's camera homography.
+    // Both directions of every visible set's camera homography.
     const active = PM.activeSet();
-    const maps = PM.sets().map((set) => {
-      const quad = PM.quad('camera', set);
+    const maps = view.visibleSets().map((set) => {
+      const quad = view.quad(set);
       const worldToCam = PM.solveHomography(set.refs, quad);
       return { set, quad, worldToCam, camToWorld: PM.invertHomography(worldToCam) };
     });
@@ -163,23 +198,24 @@
     const auto = detect();
     if (auto) found.push({ source: modeEl.value, cam: auto });
 
-    state.detections = [];
+    const detections = [];
     for (const f of found) {
       const candidates = [];
       for (const m of maps) {
         const world = PM.applyHomography(m.camToWorld, f.cam);
         if (!world) continue;
-        const d = { x: world[0], y: world[1], source: f.source, setId: m.set.id };
+        const d = { x: world[0], y: world[1], source: f.source, setId: m.set.id, view: view.id };
         const rank = PM.polygonsAt(d).length ? 2 : PM.pointInPolygon(f.cam, m.quad) ? 1 : m.set === active ? 0 : -1;
         candidates.push({ d, rank });
       }
       const best = Math.max(-1, ...candidates.map((c) => c.rank));
-      if (best >= 0) state.detections.push(...candidates.filter((c) => c.rank === best).map((c) => c.d));
+      if (best >= 0) detections.push(...candidates.filter((c) => c.rank === best).map((c) => c.d));
     }
-    const json = JSON.stringify(state.detections);
+    const json = JSON.stringify(detections);
     if (json !== lastSent) {
       lastSent = json;
-      PM.publish('detections');
+      mine = detections;
+      PM.publishDetections(mine);
       updateReadout();
     }
 
@@ -200,9 +236,11 @@
     for (const f of found) PM.drawDetection(ctx, ...toPx(f.cam));
 
     // Active set last so its handles sit on top.
-    for (const set of [...PM.sets().filter((s) => s !== active), active]) PM.drawQuad(ctx, handlesPx(set), set);
+    for (const m of [...maps.filter((m) => m.set !== active), ...maps.filter((m) => m.set === active)]) {
+      PM.drawQuad(ctx, m.quad.map(toPx), m.set);
+    }
 
-    if (!maps.find((m) => m.set === active).worldToCam) {
+    if (maps.some((m) => m.set === active && !m.worldToCam)) {
       PM.drawLabel(ctx, `${active.name}: reference points are degenerate — move a corner.`, w / 2, frame.y + 20, '#ff6b6b');
     }
 
@@ -226,14 +264,15 @@
   canvas.addEventListener('pointerleave', () => { pointer = null; });
 
   // Don't leave a stale marker on the other pages when this one closes.
-  window.addEventListener('pagehide', () => {
-    state.detections = [];
-    PM.publish('detections');
-  });
+  window.addEventListener('pagehide', () => PM.publishDetections([]));
 
-  PM.init(['camera', 'detections'], (topic) => {
+  PM.init((topic, key) => {
     editor.sync(topic);
-    if (topic === 'geometry') updateReadout();
+    if (topic === 'camera' && key === view.id) editor.refresh(); // a mirroring tab changed this view
+    if (topic === 'geometry' || topic === 'detections') updateReadout();
+  }, () => {
+    view.save();
+    PM.publishDetections(mine);
   });
   requestAnimationFrame(tick);
 })();

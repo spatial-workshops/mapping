@@ -26,6 +26,7 @@ PM.createEditor = (opts) => {
     render = () => {},          // redraw request (pages with a frame loop can omit it)
     enabled = () => true,       // false disables all input (projector "clean" mode)
     onRefresh = () => {},       // extra sidebar refresh for the page
+    visible = () => true,       // (set) -> false if the set is hidden in this view
     intercept = () => false,    // (event, x, y) -> true if the page handles this press itself
     onEmptyPress = () => {},    // (event) Edit-tool press that hit nothing
     initialTool = 'edit',
@@ -115,6 +116,7 @@ PM.createEditor = (opts) => {
   function polygonAt(x, y) {
     const worldBySet = {};
     for (const poly of [...polygons()].reverse()) {
+      if (!visible(setOf(poly))) continue;
       if (!(poly.setId in worldBySet)) worldBySet[poly.setId] = toWorld(setOf(poly), x, y);
       const world = worldBySet[poly.setId];
       if (world && PM.pointInPolygon(world, poly.points)) return { poly, world };
@@ -137,6 +139,7 @@ PM.createEditor = (opts) => {
 
     if (tool === 'draw') {
       const set = draft.length ? setById(draftSetId) : PM.activeSet();
+      if (!visible(set)) return; // nothing drawn here would be shown
       if (!draft.length) { selectedId = null; draftSetId = set.id; refresh(); }
       const pts = draft.map((p) => toScreen(set, p));
       if (draft.length >= 3 && PM.pick([pts[0]], x, y) === 0) { finishDraft(); return; }
@@ -257,13 +260,17 @@ PM.createEditor = (opts) => {
   function refresh() {
     // A draft belongs to one set; drop it if that set is no longer the active one.
     if (draft.length && draftSetId !== state.active) draft = [];
+    // Nothing hidden stays selected.
+    if (selected() && !visible(setOf(selected()))) selectedId = null;
     const sel = selected();
 
     if (ui.draw) ui.draw.classList.toggle('active', tool === 'draw');
     if (ui.edit) ui.edit.classList.toggle('active', tool === 'edit');
     if (tool === 'draw') canvas.style.cursor = 'crosshair';
     if (ui.hint) {
-      ui.hint.textContent = tool === 'draw'
+      ui.hint.textContent = !visible(PM.activeSet())
+        ? `"${PM.activeSet().name}" is the active set but is hidden in this view. Tick it, or pick another set, to draw.`
+        : tool === 'draw'
         ? 'Click to add corners. Click the first corner, double-click or press Enter to close. Backspace undoes a corner, Esc cancels.'
         : 'Click a polygon to select it, drag to move it, drag its corners to reshape it. Delete removes it. Drag A–D to place reference points.';
     }
