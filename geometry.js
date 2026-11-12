@@ -1,5 +1,6 @@
-// Page 1: the "true geometry" editor. Owns the polygons and the four
-// reference points, and broadcasts them on every change.
+// Page 1: the "true geometry" editor. Owns the polygons and the mapping sets
+// (each with its four reference points A–D), and broadcasts them on every
+// change. Every polygon belongs to one mapping set.
 
 (() => {
   const { WORLD, state } = PM;
@@ -10,6 +11,9 @@
   const colorInput = document.getElementById('color');
   const snapInput = document.getElementById('snap');
   const listEl = document.getElementById('list');
+  const polySetSelect = document.getElementById('poly-set');
+  const setsEl = document.getElementById('sets');
+  const setNameInput = document.getElementById('set-name');
   const hintEl = document.getElementById('hint');
   const detectedEl = document.getElementById('detected');
 
@@ -96,16 +100,9 @@
       });
     }
 
-    // Reference points
-    ctx.setLineDash([4, 4]);
-    ctx.beginPath();
-    geo().refs.map(toScreen).forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
-    ctx.closePath();
-    ctx.strokeStyle = 'rgba(255,225,77,0.35)';
-    ctx.lineWidth = 1;
-    ctx.stroke();
-    ctx.setLineDash([]);
-    geo().refs.forEach((p, i) => PM.drawHandle(ctx, ...toScreen(p), PM.REF_LABELS[i]));
+    // Reference points of every mapping set, active set on top
+    const active = PM.activeSet();
+    for (const set of [...PM.sets().filter((s) => s !== active), active]) PM.drawQuad(ctx, refsPx(set), set);
 
     for (const d of state.detections) PM.drawDetection(ctx, ...toScreen([d.x, d.y]));
   }
@@ -122,6 +119,34 @@
     nameInput.disabled = !sel;
     if (document.activeElement !== nameInput) nameInput.value = sel ? sel.name : '';
     colorInput.value = sel ? sel.color : drawColor;
+    PM.fillSetSelect(polySetSelect, sel ? sel.setId : state.active);
+    polySetSelect.disabled = !sel;
+
+    // Mapping sets
+    const active = PM.activeSet();
+    if (document.activeElement !== setNameInput) setNameInput.value = active.name;
+    setsEl.innerHTML = '';
+    for (const set of PM.sets()) {
+      const li = document.createElement('li');
+      li.classList.toggle('selected', set === active);
+      const swatch = document.createElement('span');
+      swatch.className = 'swatch';
+      swatch.style.cssText = `background:${set.color};border-radius:50%`;
+      const name = document.createElement('span');
+      name.className = 'name';
+      const count = geo().polygons.filter((p) => p.setId === set.id).length;
+      name.textContent = `${set.name} (${count})`;
+      li.append(swatch, name);
+      if (PM.sets().length > 1) {
+        const del = document.createElement('button');
+        del.textContent = '✕';
+        del.title = 'Delete set';
+        del.onclick = (e) => { e.stopPropagation(); removeSet(set); };
+        li.append(del);
+      }
+      li.onclick = () => activate(set.id);
+      setsEl.append(li);
+    }
 
     listEl.innerHTML = '';
     if (!geo().polygons.length) {
@@ -139,23 +164,24 @@
       const name = document.createElement('span');
       name.className = 'name';
       name.textContent = poly.name || '(unnamed)';
+      const setDot = document.createElement('span');
+      const polySet = PM.sets().find((s) => s.id === poly.setId);
+      setDot.className = 'swatch';
+      setDot.title = polySet.name;
+      setDot.style.cssText = `background:${polySet.color};border-radius:50%;width:8px;height:8px`;
       const del = document.createElement('button');
       del.textContent = '✕';
       del.title = 'Delete';
       del.onclick = (e) => { e.stopPropagation(); removePolygon(poly.id); };
       li.onclick = () => { setTool('edit'); select(poly.id); };
-      li.append(swatch, name, del);
+      li.append(swatch, name, setDot, del);
       listEl.append(li);
     }
     refreshDetected();
   }
 
   function refreshDetected() {
-    if (!state.detections.length) { detectedEl.textContent = '—'; return; }
-    detectedEl.textContent = state.detections.map((d) => {
-      const inside = geo().polygons.filter((p) => PM.pointInPolygon([d.x, d.y], p.points)).map((p) => p.name || '(unnamed)');
-      return `${d.source}: (${Math.round(d.x)}, ${Math.round(d.y)})` + (inside.length ? `\n  in ${inside.join(', ')}` : '');
-    }).join('\n');
+    detectedEl.textContent = PM.describeDetections();
   }
 
   // ---- Editing ----------------------------------------------------------
@@ -169,6 +195,8 @@
 
   function select(id) {
     selectedId = id;
+    const sel = selected();
+    if (sel) PM.setActive(sel.setId); // work in the selected polygon's set
     refreshUI();
     render();
   }
@@ -176,7 +204,7 @@
   function finishDraft() {
     if (draft.length < 3) return;
     const n = geo().polygons.length + 1;
-    const poly = { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), name: `Polygon ${n}`, color: drawColor, points: draft };
+    const poly = { id: PM.uid(), name: `Polygon ${n}`, color: drawColor, setId: PM.activeSet().id, points: draft };
     geo().polygons.push(poly);
     draft = [];
     selectedId = poly.id;
@@ -193,6 +221,28 @@
     changed();
   }
 
+  // ---- Mapping sets -----------------------------------------------------
+
+  const refsPx = (set) => set.refs.map(toScreen);
+
+  function activate(id) {
+    PM.setActive(id);
+    const sel = selected();
+    if (sel && sel.setId !== id) selectedId = null;
+    refreshUI();
+    render();
+  }
+
+  function removeSet(set) {
+    const others = PM.sets().filter((s) => s !== set);
+    const mine = geo().polygons.filter((p) => p.setId === set.id);
+    if (mine.length && !confirm(`Delete "${set.name}"? Its ${mine.length} polygon(s) will move to "${others[0].name}".`)) return;
+    mine.forEach((p) => { p.setId = others[0].id; });
+    geo().sets = others;
+    if (state.active === set.id) PM.setActive(others[0].id);
+    changed();
+  }
+
   function pointerPos(e) {
     const r = canvas.getBoundingClientRect();
     return [e.clientX - r.left, e.clientY - r.top];
@@ -201,6 +251,7 @@
   canvas.addEventListener('pointerdown', (e) => {
     if (e.button !== 0) return;
     nameInput.blur();
+    setNameInput.blur();
     const [sx, sy] = pointerPos(e);
     const world = toWorld(sx, sy);
 
@@ -215,8 +266,12 @@
     }
 
     canvas.setPointerCapture(e.pointerId);
-    const ref = PM.pick(geo().refs.map(toScreen), sx, sy);
-    if (ref >= 0) { drag = { kind: 'ref', index: ref }; return; }
+    const ref = PM.pickHandle(refsPx, sx, sy);
+    if (ref) {
+      drag = { kind: 'ref', ...ref };
+      activate(ref.set.id); // grabbing a handle makes its set the active one
+      return;
+    }
 
     const sel = selected();
     if (sel) {
@@ -237,7 +292,7 @@
     const world = snap(toWorld(...pointerPos(e)));
     cursor = world;
     if (drag) {
-      if (drag.kind === 'ref') geo().refs[drag.index] = world;
+      if (drag.kind === 'ref') drag.set.refs[drag.index] = world;
       if (drag.kind === 'vertex') selected().points[drag.index] = world;
       if (drag.kind === 'poly') {
         const dx = world[0] - drag.start[0], dy = world[1] - drag.start[1];
@@ -255,10 +310,11 @@
   canvas.addEventListener('dblclick', () => { if (tool === 'draw') finishDraft(); });
 
   window.addEventListener('keydown', (e) => {
-    if (e.target === nameInput) {
-      if (e.key === 'Enter' || e.key === 'Escape') nameInput.blur();
+    if (e.target === nameInput || e.target === setNameInput) {
+      if (e.key === 'Enter' || e.key === 'Escape') e.target.blur();
       return;
     }
+    if (e.target === polySetSelect) return;
     if (e.key === 'Enter') finishDraft();
     else if (e.key === 'Escape') { draft = []; render(); }
     else if (e.key === 'Backspace' && draft.length) { draft.pop(); render(); }
@@ -283,8 +339,31 @@
     else { drawColor = colorInput.value; render(); }
   });
 
+  polySetSelect.addEventListener('change', () => {
+    const sel = selected();
+    if (!sel) return;
+    sel.setId = polySetSelect.value;
+    PM.setActive(sel.setId);
+    polySetSelect.blur();
+    changed();
+  });
+
+  setNameInput.addEventListener('input', () => {
+    PM.activeSet().name = setNameInput.value;
+    changed();
+  });
+
+  document.getElementById('add-set').onclick = () => {
+    const set = PM.addSet();
+    PM.publish('geometry');
+    setTool('edit'); // so the new A–D can be dragged into place straight away
+    activate(set.id);
+  };
+
   document.getElementById('reset-refs').onclick = () => {
-    geo().refs = [[150, 100], [1050, 100], [1050, 700], [150, 700]];
+    const i = PM.sets().indexOf(PM.activeSet());
+    const o = 40 * (i % 5);
+    PM.activeSet().refs = [[150 + o, 100 + o], [1050 - o, 100 + o], [1050 - o, 700 - o], [150 + o, 700 - o]];
     changed();
   };
 
@@ -298,9 +377,15 @@
 
   // ---- Boot -------------------------------------------------------------
 
-  PM.init(['geometry'], (topic) => {
+  PM.init(['geometry', 'active'], (topic) => {
     if (topic === 'detections') { refreshDetected(); render(); }
     if (topic === 'geometry') { refreshUI(); render(); } // another geometry tab edited it
+    if (topic === 'active') {                            // set chosen on another page
+      const sel = selected();
+      if (sel && sel.setId !== state.active) selectedId = null;
+      refreshUI();
+      render();
+    }
   });
 
   new ResizeObserver(render).observe(canvas);

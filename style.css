@@ -64,19 +64,19 @@ select { width: 100%; }
 .row > button { flex: 1; }
 label.check { display: flex; gap: 6px; align-items: center; color: #a4abb8; font-size: 12.5px; }
 
-#list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
-#list li {
+.list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.list li {
   display: flex; align-items: center; gap: 8px;
   padding: 5px 8px; border-radius: 6px; cursor: pointer;
   border: 1px solid transparent;
 }
-#list li:hover { background: #262b33; }
-#list li.selected { border-color: #3d9bff; background: #232a36; }
-#list .swatch { width: 14px; height: 14px; border-radius: 3px; flex: none; }
-#list .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#list button { padding: 0 7px; border: none; background: none; color: #8b93a1; }
-#list button:hover { color: #ff6b6b; }
-#list .empty { color: #6f7785; cursor: default; font-size: 12.5px; }
+.list li:hover { background: #262b33; }
+.list li.selected { border-color: #3d9bff; background: #232a36; }
+.list .swatch { width: 14px; height: 14px; border-radius: 3px; flex: none; }
+.list .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.list button { padding: 0 7px; border: none; background: none; color: #8b93a1; }
+.list button:hover { color: #ff6b6b; }
+.list .empty { color: #6f7785; cursor: default; font-size: 12.5px; }
 
 .readout {
   font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;

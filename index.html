@@ -31,20 +31,28 @@
         <input type="color" id="color" value="#ff5a5f" title="Colour">
         <input type="text" id="name" placeholder="Name" disabled>
       </div>
+      <div class="row" style="margin-top:8px">
+        <select id="poly-set" title="Mapping set this polygon belongs to" disabled></select>
+      </div>
       <label class="check" style="margin-top:8px"><input type="checkbox" id="snap" checked> Snap to grid</label>
     </section>
 
     <section>
       <h2>Polygons</h2>
-      <ul id="list"></ul>
+      <ul id="list" class="list"></ul>
+      <button id="clear" class="danger" style="margin-top:8px;width:100%">Clear all polygons</button>
     </section>
 
     <section>
-      <h2>Reference points</h2>
-      <p>A–D are the four known points shared by both homographies. With the Edit tool, drag them onto features you can find in the real space.</p>
+      <h2>Mapping sets</h2>
+      <p>Each set is one surface: four reference points A–D here, on the projector and in the camera. New polygons join the active set. With the Edit tool, drag A–D onto features you can find on the real surface.</p>
+      <ul id="sets" class="list" style="margin-top:8px"></ul>
       <div class="row" style="margin-top:8px">
+        <input type="text" id="set-name" placeholder="Set name">
+      </div>
+      <div class="row" style="margin-top:8px">
+        <button id="add-set">Add set</button>
         <button id="reset-refs">Reset A–D</button>
-        <button id="clear" class="danger">Clear all</button>
       </div>
     </section>
 

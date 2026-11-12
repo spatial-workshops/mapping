@@ -1,9 +1,13 @@
-// Page 3: webcam. A second homography relates the camera image to the true
-// geometry. It is defined by where the reference points A–D (true geometry)
-// are seen in the camera image, set by dragging the four handles.
+// Page 3: webcam. Each mapping set has a homography relating the camera image
+// to the true geometry, defined by where that set's reference points A–D are
+// seen in the camera image (its four draggable handles).
 //
-//   true geometry -> camera : draws the polygons over the video
+//   true geometry -> camera : draws each set's polygons over the video
 //   camera -> true geometry : maps detected points back, and broadcasts them
+//
+// A detected camera point is tried against every set. It is attributed to the
+// sets where it lands inside one of that set's polygons; failing that, to the
+// sets whose A–D outline contains it; failing that, to the active set.
 //
 // Camera coordinates are normalised (0..1) to the video frame so they do not
 // depend on how large the video is drawn.
@@ -17,6 +21,7 @@
   const modeEl = document.getElementById('mode');
   const sensitivityEl = document.getElementById('sensitivity');
   const readoutEl = document.getElementById('readout');
+  const setSelect = document.getElementById('set');
 
   // Small offscreen copy of each frame for the pixel-based detectors.
   const probe = document.createElement('canvas');
@@ -25,7 +30,7 @@
 
   let stream = null;
   let frame = { x: 0, y: 0, w: 1, h: 1 }; // where the video is drawn on the canvas
-  let dragging = -1;
+  let dragging = null;     // { set, index }
   let pointer = null;      // hovered point, normalised to the video frame
   let prevLuma = null;     // earlier frame, for motion detection
   let prevTime = 0;
@@ -33,6 +38,7 @@
 
   const toPx = ([x, y]) => [frame.x + x * frame.w, frame.y + y * frame.h];
   const toNorm = (x, y) => [(x - frame.x) / frame.w, (y - frame.y) / frame.h];
+  const handlesPx = (set) => PM.quad('camera', set).map(toPx);
   const live = () => stream && video.videoWidth > 0;
 
   // ---- Webcam -----------------------------------------------------------
@@ -64,7 +70,8 @@
   }
 
   startBtn.onclick = () => (stream ? stop() : start());
-  document.getElementById('reset').onclick = () => PM.reset('camera');
+  document.getElementById('reset').onclick = () => PM.resetQuad('camera', PM.activeSet());
+  setSelect.onchange = () => PM.setActive(setSelect.value);
   modeEl.onchange = () => { prevLuma = null; };
 
   // ---- Detection --------------------------------------------------------
@@ -122,13 +129,15 @@
       PM.drawLabel(ctx, 'Webcam not started', w / 2, h / 2, '#6f7785');
     }
 
-    // The two directions of the camera homography.
-    const worldToCam = PM.solveHomography(state.geometry.refs, state.camera);
-    const camToWorld = PM.invertHomography(worldToCam);
-    const mapToCanvas = (p) => {
-      const c = PM.applyHomography(worldToCam, p);
-      return c && toPx(c);
-    };
+    if (document.activeElement !== setSelect) PM.fillSetSelect(setSelect, state.active);
+
+    // Both directions of every set's camera homography.
+    const active = PM.activeSet();
+    const maps = PM.sets().map((set) => {
+      const quad = PM.quad('camera', set);
+      const worldToCam = PM.solveHomography(set.refs, quad);
+      return { set, quad, worldToCam, camToWorld: PM.invertHomography(worldToCam) };
+    });
 
     // Detect in camera space, convert to true geometry, broadcast on change.
     const found = [];
@@ -138,8 +147,16 @@
 
     state.detections = [];
     for (const f of found) {
-      const world = PM.applyHomography(camToWorld, f.cam);
-      if (world) state.detections.push({ x: world[0], y: world[1], source: f.source });
+      const candidates = [];
+      for (const m of maps) {
+        const world = PM.applyHomography(m.camToWorld, f.cam);
+        if (!world) continue;
+        const d = { x: world[0], y: world[1], source: f.source, setId: m.set.id };
+        const rank = PM.polygonsAt(d).length ? 2 : PM.pointInPolygon(f.cam, m.quad) ? 1 : m.set === active ? 0 : -1;
+        candidates.push({ d, rank });
+      }
+      const best = Math.max(-1, ...candidates.map((c) => c.rank));
+      if (best >= 0) state.detections.push(...candidates.filter((c) => c.rank === best).map((c) => c.d));
     }
     const json = JSON.stringify(state.detections);
     if (json !== lastSent) {
@@ -153,35 +170,28 @@
     ctx.beginPath();
     ctx.rect(frame.x, frame.y, frame.w, frame.h);
     ctx.clip();
-    PM.drawPolygons(ctx, mapToCanvas);
+    for (const m of maps) {
+      PM.drawPolygons(ctx, (p) => {
+        const c = PM.applyHomography(m.worldToCam, p);
+        return c && toPx(c);
+      }, { setId: m.set.id });
+    }
     ctx.restore();
 
     for (const f of found) PM.drawDetection(ctx, ...toPx(f.cam));
 
-    const handles = state.camera.map(toPx);
-    ctx.beginPath();
-    handles.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
-    ctx.closePath();
-    ctx.setLineDash([4, 4]);
-    ctx.strokeStyle = 'rgba(255,225,77,0.5)';
-    ctx.lineWidth = 1;
-    ctx.stroke();
-    ctx.setLineDash([]);
-    handles.forEach(([x, y], i) => PM.drawHandle(ctx, x, y, PM.REF_LABELS[i]));
+    // Active set last so its handles sit on top.
+    for (const set of [...PM.sets().filter((s) => s !== active), active]) PM.drawQuad(ctx, handlesPx(set), set);
 
-    if (!worldToCam) PM.drawLabel(ctx, 'Reference points are degenerate — move a corner.', w / 2, frame.y + 20, '#ff6b6b');
+    if (!maps.find((m) => m.set === active).worldToCam) {
+      PM.drawLabel(ctx, `${active.name}: reference points are degenerate — move a corner.`, w / 2, frame.y + 20, '#ff6b6b');
+    }
 
     requestAnimationFrame(tick);
   }
 
   function updateReadout() {
-    if (!state.detections.length) { readoutEl.textContent = '—'; return; }
-    readoutEl.textContent = state.detections.map((d) => {
-      const inside = state.geometry.polygons
-        .filter((p) => PM.pointInPolygon([d.x, d.y], p.points))
-        .map((p) => p.name || '(unnamed)');
-      return `${d.source}: (${Math.round(d.x)}, ${Math.round(d.y)})` + (inside.length ? `\n  in ${inside.join(', ')}` : '');
-    }).join('\n');
+    readoutEl.textContent = PM.describeDetections();
   }
 
   // ---- Handle dragging and pointer probe ----------------------------------
@@ -192,26 +202,28 @@
   }
 
   canvas.addEventListener('pointerdown', (e) => {
-    dragging = PM.pick(state.camera.map(toPx), ...pointerPos(e), 16);
-    if (dragging >= 0) canvas.setPointerCapture(e.pointerId);
+    dragging = PM.pickHandle(handlesPx, ...pointerPos(e), 16);
+    if (!dragging) return;
+    canvas.setPointerCapture(e.pointerId);
+    PM.setActive(dragging.set.id); // grabbing a handle makes its set the active one
   });
 
   canvas.addEventListener('pointermove', (e) => {
     const [x, y] = pointerPos(e);
     const [nx, ny] = toNorm(x, y);
-    if (dragging >= 0) {
-      state.camera[dragging] = [Math.max(0, Math.min(1, nx)), Math.max(0, Math.min(1, ny))];
+    if (dragging) {
+      PM.quad('camera', dragging.set)[dragging.index] = [Math.max(0, Math.min(1, nx)), Math.max(0, Math.min(1, ny))];
       PM.publish('camera');
       pointer = null;
       return;
     }
     const inside = nx >= 0 && nx <= 1 && ny >= 0 && ny <= 1;
     pointer = inside ? [nx, ny] : null;
-    canvas.style.cursor = PM.pick(state.camera.map(toPx), x, y, 16) >= 0 ? 'grab' : 'crosshair';
+    canvas.style.cursor = PM.pickHandle(handlesPx, x, y, 16) ? 'grab' : 'crosshair';
   });
 
-  canvas.addEventListener('pointerup', () => { dragging = -1; });
-  canvas.addEventListener('pointercancel', () => { dragging = -1; });
+  canvas.addEventListener('pointerup', () => { dragging = null; });
+  canvas.addEventListener('pointercancel', () => { dragging = null; });
   canvas.addEventListener('pointerleave', () => { pointer = null; });
 
   // Don't leave a stale marker on the other pages when this one closes.
