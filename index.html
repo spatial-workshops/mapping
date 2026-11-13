@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>True Geometry · Projection Mapping</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="app">
+  <aside>
+    <h1>1 · True geometry</h1>
+    <nav>
+      <a class="here" href="index.html">Geometry</a>
+      <a href="projector.html" target="_blank">Projector ↗</a>
+      <a href="camera.html" target="_blank">Camera ↗</a>
+    </nav>
+    <p>Draw the real space (a floor plan or an elevation). Everything here is sent live to the projector and camera pages, where you can draw too.</p>
+
+    <section>
+      <h2>Tool</h2>
+      <div class="row">
+        <button id="tool-draw" class="active">Draw</button>
+        <button id="tool-edit">Edit</button>
+      </div>
+      <p id="hint" style="margin-top:8px"></p>
+    </section>
+
+    <section>
+      <h2>Polygon</h2>
+      <div class="row">
+        <input type="color" id="color" value="#ff5a5f" title="Colour">
+        <input type="text" id="name" placeholder="Name" disabled>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <select id="poly-set" title="Mapping set this polygon belongs to" disabled></select>
+      </div>
+      <label class="check" style="margin-top:8px"><input type="checkbox" id="snap" checked> Snap to grid</label>
+    </section>
+
+    <section>
+      <h2>Polygons</h2>
+      <ul id="list" class="list"></ul>
+      <button id="clear" class="danger" style="margin-top:8px;width:100%">Clear all polygons</button>
+    </section>
+
+    <section>
+      <h2>Mapping sets</h2>
+      <p>Each set is one surface: four reference points A–D here, on the projector and in the camera. New polygons join the active set. With the Edit tool, drag A–D onto features you can find on the real surface, or drag a set's dashed outline to move the whole set and its polygons.</p>
+      <ul id="sets" class="list" style="margin-top:8px"></ul>
+      <div class="row" style="margin-top:8px">
+        <input type="text" id="set-name" placeholder="Set name">
+      </div>
+      <div class="row" style="margin-top:8px">
+        <button id="add-set">Add set</button>
+        <button id="reset-refs">Reset A–D</button>
+      </div>
+    </section>
+
+    <section>
+      <h2>View</h2>
+      <p>Scroll to zoom. Drag empty space (Edit tool), or hold Space or the middle button and drag, to pan.</p>
+      <div class="row" style="margin-top:8px">
+        <button id="zoom-out" title="Zoom out (−)">−</button>
+        <button id="zoom-fit" title="Fit the sheet (0)">Fit</button>
+        <button id="zoom-in" title="Zoom in (+)">+</button>
+      </div>
+    </section>
+
+    <section>
+      <h2>Detected from camera</h2>
+      <div class="readout" id="detected">—</div>
+    </section>
+  </aside>
+
+  <main><canvas id="canvas"></canvas></main>
+
+  <script src="shared.js"></script>
+  <script src="editor.js"></script>
+  <script src="geometry.js"></script>
+</body>
+</html>

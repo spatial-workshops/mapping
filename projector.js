@@ -1,0 +1,118 @@
+// Page 2: projector output. Each mapping set has one homography from the
+// true geometry onto the projector's pixels, defined by where that set's
+// reference points A–D should appear on screen (its four draggable handles).
+// A polygon is warped by the homography of the set it belongs to, so
+// different sets can land on different surfaces.
+//
+// Drawing here goes the other way: a corner clicked on the projector is sent
+// through the inverse of the active set's homography and stored in true
+// geometry, so it reappears exactly where it was clicked.
+//
+// This tab is one projector "view" (?view=N). Each view keeps its own handles
+// and its own choice of which mapping sets it shows, so several projectors
+// can run side by side in separate tabs.
+
+(() => {
+  const { state } = PM;
+  const canvas = document.getElementById('canvas');
+  const setsEl = document.getElementById('sets');
+  const view = PM.openView('projector');
+
+  let showGrid = true;
+  let clean = false;   // true = output only: no handles, no controls
+  let size = { w: 1, h: 1 };
+
+  const quadPx = (set) => view.quad(set).map(([x, y]) => [x * size.w, y * size.h]);
+  const handlesPx = (set) => (view.visible(set) ? quadPx(set) : []); // hidden sets can't be grabbed
+  const homography = (set) => PM.solveHomography(set.refs, quadPx(set)); // true geometry -> pixels
+
+  const editor = PM.createEditor({
+    canvas,
+    toScreen: (set, p) => PM.applyHomography(homography(set), p),
+    toWorld: (set, x, y) => PM.applyHomography(PM.invertHomography(homography(set)), [x, y]),
+    handlesOf: handlesPx,
+    moveHandle(set, index, x, y) {
+      view.quad(set)[index] = [x / size.w, y / size.h];
+      view.save();
+    },
+    render,
+    enabled: () => !clean,
+    visible: view.visible,
+    onRefresh: refreshSets,
+  });
+
+  function refreshSets() {
+    PM.renderSetToggles(setsEl, view, {
+      onToggle() { editor.refresh(); render(); },
+      onActivate: (set) => editor.activate(set.id),
+    });
+  }
+
+  function render() {
+    const { ctx, w, h } = PM.fitCanvas(canvas);
+    size = { w, h };
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, w, h);
+
+    const shown = view.visibleSets();
+    for (const set of shown) renderSet(ctx, set, w, h);
+    if (!clean) {
+      editor.drawOverlay(ctx);
+      // Active set last so its handles sit on top.
+      const active = PM.activeSet();
+      for (const set of [...shown.filter((s) => s !== active), ...shown.filter((s) => s === active)]) PM.drawQuad(ctx, quadPx(set), set);
+    }
+  }
+
+  function renderSet(ctx, set, w, h) {
+    // True geometry -> projector pixels, for this set
+    const H = homography(set);
+    const map = (p) => PM.applyHomography(H, p);
+
+    if (H && showGrid && set === PM.activeSet()) PM.drawGrid(ctx, H, { x: 0, y: 0, w, h }, set.refs);
+
+    if (H) {
+      PM.drawPolygons(ctx, map, { fillAlpha: 0.55, setId: set.id, selectedId: clean ? null : editor.selectedId });
+      for (const d of state.detections) {
+        const p = d.setId === set.id && map([d.x, d.y]);
+        if (p) PM.drawDetection(ctx, ...p);
+      }
+    } else if (set === PM.activeSet()) {
+      PM.drawLabel(ctx, `${set.name}: reference points are degenerate — move a corner.`, w / 2, h / 2, '#ff6b6b');
+    }
+  }
+
+  // ---- Controls ---------------------------------------------------------
+
+  const actions = {
+    fullscreen() {
+      if (document.fullscreenElement) document.exitFullscreen();
+      else document.documentElement.requestFullscreen();
+    },
+    grid() { showGrid = !showGrid; render(); },
+    reset() { view.resetQuad(PM.activeSet()); render(); },
+    hide() {
+      clean = !clean;
+      document.body.classList.toggle('clean', clean);
+      render();
+    },
+  };
+
+  for (const id of Object.keys(actions)) document.getElementById(id).onclick = actions[id];
+
+  PM.bindViewControls(view, 'Projector', document.getElementById('view'), document.getElementById('new-view'));
+
+  window.addEventListener('keydown', (e) => {
+    if (e.target.matches('input[type="text"], select')) return;
+    const action = { f: 'fullscreen', g: 'grid', r: 'reset', h: 'hide' }[e.key.toLowerCase()];
+    if (action) actions[action]();
+  });
+
+  PM.init((topic, key) => {
+    editor.sync(topic);
+    if (topic === 'projector' && key === view.id) editor.refresh(); // a mirroring tab changed this view
+    render();
+  }, view.save);
+  window.addEventListener('resize', render);
+  render();
+})();

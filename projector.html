@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Projector · Projection Mapping</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="projector">
+  <canvas id="canvas"></canvas>
+
+  <div id="bar">
+    <select id="view" title="Which projector this tab is" style="width:auto"></select>
+    <button id="new-view" title="Open another projector in a new tab">＋</button>
+    <nav>
+      <a href="index.html" target="_blank">Geometry ↗</a>
+      <a href="camera.html" target="_blank">Camera ↗</a>
+    </nav>
+    <ul id="sets" class="list inline" title="Mapping sets shown by this projector"></ul>
+    <button id="tool-draw">Draw <kbd>D</kbd></button>
+    <button id="tool-edit">Edit <kbd>E</kbd></button>
+    <input type="color" id="color" value="#ff5a5f" title="Colour">
+    <input type="text" id="name" placeholder="Polygon name" style="width:150px" disabled>
+    <button id="delete" class="danger" title="Delete the selected polygon">Delete</button>
+    <button id="fullscreen">Fullscreen <kbd>F</kbd></button>
+    <button id="grid">Grid <kbd>G</kbd></button>
+    <button id="reset">Reset corners <kbd>R</kbd></button>
+    <button id="hide">Hide controls <kbd>H</kbd></button>
+    <span class="hint" id="hint"></span>
+  </div>
+
+  <script src="shared.js"></script>
+  <script src="editor.js"></script>
+  <script src="projector.js"></script>
+</body>
+</html>
